@@ -1,0 +1,37 @@
+# LangChain
+langchain>=0.3.26
+langchain-community>=0.3.26
+langchain-text-splitters>=0.3.0
+langchain-core>=0.3.0
+
+# PDF Loaders
+pypdf
+pymupdf
+
+# Embeddings
+sentence-transformers>=5.0.0
+
+# Vector Database
+chromadb>=1.0.15
+
+# Numerical & ML
+numpy
+scikit-learn
+
+# PostgreSQL
+asyncpg
+psycopg2-binary
+
+# LangGraph
+langgraph
+
+#Grok
+langchain-groq>=0.3.0
+
+python-dotenv
+python-telegram-bot
+
+httpx
+# API Server
+fastapi
+uvicorn
