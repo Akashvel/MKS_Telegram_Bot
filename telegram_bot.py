@@ -83,6 +83,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Welcome! Please share your phone number to verify your access level.",
         reply_markup=keyboard,
+        protect_content=True,
     )
 
 
@@ -103,6 +104,7 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Verified! You are logged in as <b>{role.capitalize()}</b>.\n{access_msg}",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode="HTML",
+        protect_content=True,
     )
 
 
@@ -139,7 +141,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     formatted = _format_for_telegram(reply)
     for chunk in _send_chunks(formatted):
-        await update.message.reply_text(chunk, parse_mode="HTML")
+        await update.message.reply_text(chunk, parse_mode="HTML", protect_content=True)
 
 
 # ---------------------------------------------------------------------------
