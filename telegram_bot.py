@@ -1,9 +1,12 @@
 import os
 import html as html_module
+import json
 import re
+from pathlib import Path
 from dotenv import load_dotenv
 import httpx
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram.error import TelegramError
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 load_dotenv()
@@ -17,8 +20,28 @@ ADMIN_NUMBERS = set(
     if n.strip()
 )
 
+USERS_FILE = Path(__file__).parent / "users.json"
+
+NOTIFY_PATTERN = re.compile(r"^notify\s*[,:]\s*(.+)$", re.IGNORECASE | re.DOTALL)
+
 # user_id -> {"role": "admin" | "guest"}
 user_sessions: dict = {}
+
+
+def _load_users() -> None:
+    if not USERS_FILE.exists():
+        return
+    try:
+        raw = json.loads(USERS_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return
+    for user_id, data in raw.items():
+        user_sessions[int(user_id)] = data
+
+
+def _save_users() -> None:
+    raw = {str(user_id): data for user_id, data in user_sessions.items()}
+    USERS_FILE.write_text(json.dumps(raw, indent=2), encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +117,7 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     role = "admin" if is_admin else "guest"
 
     user_sessions[user_id] = {"role": role}
+    _save_users()
 
     access_msg = (
         "You have <b>full access</b> including database queries and policy documents."
@@ -108,6 +132,26 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def _broadcast_notification(update: Update, context: ContextTypes.DEFAULT_TYPE, notice: str):
+    sender_id = update.effective_user.id
+    formatted = f"<b>Notice from admin</b>\n{html_module.escape(notice)}"
+
+    sent, failed = 0, 0
+    for user_id in list(user_sessions.keys()):
+        if user_id == sender_id:
+            continue
+        try:
+            await context.bot.send_message(chat_id=user_id, text=formatted, parse_mode="HTML")
+            sent += 1
+        except TelegramError:
+            failed += 1
+
+    summary = f"Notification sent to {sent} user(s)."
+    if failed:
+        summary += f" Failed to reach {failed} user(s)."
+    await update.message.reply_text(summary)
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
@@ -119,6 +163,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     role = user_sessions[user_id]["role"]
     user_text = update.message.text
+
+    if role == "admin":
+        notify_match = NOTIFY_PATTERN.match(user_text.strip())
+        if notify_match:
+            await _broadcast_notification(update, context, notify_match.group(1).strip())
+            return
 
     await update.message.chat.send_action("typing")
 
@@ -149,6 +199,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     if not TELEGRAM_BOT_TOKEN:
         raise ValueError("TELEGRAM_BOT_TOKEN is not set in .env")
+
+    _load_users()
 
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
